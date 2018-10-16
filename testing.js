@@ -1,3 +1,8 @@
 const dynamo = require("./dynamo_wrapper");
 
-dynamo.create_entity();
+
+body = `{
+    "FirstName":"JoCee", 
+    "LastName":"Porter"
+}`;
+dynamo.create_entity('Contact', body );
