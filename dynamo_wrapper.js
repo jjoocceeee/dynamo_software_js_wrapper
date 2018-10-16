@@ -11,7 +11,7 @@ var options = {
   //body: "",
 };
 
-function send_request(){
+async function send_request(){
     request(options, (error, response, body)=>{
     console.log('error:', error); // Print the error if one occurred
     console.log('statusCode:', response && response.statusCode); // Print the response status code if a response was received
@@ -25,16 +25,20 @@ function send_request(){
           Parameters: entityType  => The entity that you want to create. Example Contact
                       body        => Body of information you would like to send. Must be a json object.
 */
-function create_entity (entityType, body){
+async function create_entity (entityType, body){
   //update the url.
   options.url =  `https://apiuat.dynamosoftware.com/api/v2.0/entity/${entityType}`
   options.body = body;      //TODO: Check to make sure that this works.
-  console.log(options);
-  request.post(options, (error, response, body)=>{
-    console.log('error:', error); // Print the error if one occurred
-    console.log('statusCode:', response && response.statusCode); // Print the response status code if a response was received
-    console.log('body:', body); // Print the HTML for the page
-  });
+  try{
+    await request.post(options, (error, response, body)=>{
+      console.log('error:', error); // Print the error if one occurred
+      console.log('statusCode:', response && response.statusCode); // Print the response status code if a response was received
+      console.log('body:', body); // Print the HTML for the page
+    });
+  } catch(e){
+    console.log(e);
+  }
+
 };
 
 
@@ -42,24 +46,15 @@ function create_entity (entityType, body){
 /*
   performs a post request to https://apiuat.dynamosoftware.com/api/v2.0/entity/Contact with optional fields added to body.
           Parameters: last_name, first_name, title, company, email, street_line, city, state, country, zip_code, phone
+          
+          Returns:    _id => id of manager returned from Dyanmo
 */
-function add_manager(last_name = "", first_name = "", title = "", company = "", email = "", street_line = "", city = "", state = "", country = "", zip_code = "", phone = "" )
+async function add_manager({last_name = "", first_name = "", title = "", company = "", email = "", street_line = "", city = "", state = "", country = "", zip_code = "", phone = "" })
 {
-  body = `
-  {
-    "LastName":${last_name},
-    "FirstName":${first_name},
-    "title":${title},
-    "company":${company},
-    "email":${email},
-    "street":${street_line},
-    "city":${city},
-    "state":${state},
-    "country":${country},
-    "zip_code":${zip_code},
-    "phone":${phone}
-  }`;
-  create_entity('Contact', body);
+  body = `{"LastName":"${last_name}","FirstName":"${first_name}","Jobtitle":"${title}","Company":"${company}","ContactInfo_Email":"${email}","ContactInfo_BusinessAddress_Street":"${street_line}","ContactInfo_HomeAddress_City":"${city}","ContactInfo_BusinessAddress_State":"${state}","ContactInfo_BusinessAddress_Country":"${country}","ContactInfo_BusinessAddress_Zip":"${zip_code}","ContactInfo_BusinessPhone":"${phone}"}`;
+  response = await create_entity('Contact', body);
+  console.log("RETURNING");
+  return response.body.data._id;
 }
 
 module.exports.create_entity = create_entity;
