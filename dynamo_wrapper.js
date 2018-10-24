@@ -11,6 +11,11 @@ var options = {
   //body: "",
 };
 
+
+/*
+  Sends a request based on the options provided.
+  Do not change.
+*/
 async function send_request(){
     request(options, (error, response, body)=>{
     console.log('error:', error); // Print the error if one occurred
@@ -42,6 +47,20 @@ async function create_entity (entityType, body){
 };
 
 
+/*
+  Sends a document to api Document endpoint through POST request. 
+              Parameters: title       => Name of documents
+                          extension   => document type 
+                                          e.g. DOC, pdf, msg
+                          content     => string base64 encoded tenst from document.
+*/
+async function upload_document(title, extension, content){
+  body = `{"Title":"${title}","Extension":"${extension}","_content":"${content}}"}`;
+  response = await create_entity('Document', body);
+  console.log("RETURNING");
+  return response.body.data._id;
+}
+
 
 /*
   performs a post request to https://apiuat.dynamosoftware.com/api/v2.0/entity/Contact with optional fields added to body.
@@ -57,6 +76,12 @@ async function add_manager({last_name = "", first_name = "", title = "", company
   return response.body.data._id;
 }
 
+
+
+
+
+
+module.exports.upload_document = upload_document;
 module.exports.create_entity = create_entity;
 module.exports.send_request = send_request;
 module.exports.add_manager = add_manager;
