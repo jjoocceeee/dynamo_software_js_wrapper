@@ -6,9 +6,9 @@ var options = {
   proxy: auth.proxy,
   headers: {
     'Content-Type' : 'application/json',
-    'Authorization' : auth.api
+    'Authorization' : auth.api,
+    'Accept': 'application/json'
   },
-  //body: "",
 };
 
 /*
@@ -32,7 +32,7 @@ async function create_entity(entityType, body) {
           console.log('error:', error); // Print the error if one occurred
           reject(error);
         }
-      else {
+        else {
           resolve({response, body});
           console.log('statusCode:', response && response.statusCode); // Print the response status code if a response was received
           console.log('body:', body); // Print the HTML for the page
@@ -52,7 +52,7 @@ async function create_entity(entityType, body) {
                           content     => string base64 encoded senst from document.
 */
 async function upload_document(title, extension, content){
-  body = `{"Title":"${title}","Extension":"${extension}","_content":"${content}}"}`;
+  body = `{"Title":"${title}","Extension":".${extension}","_content":"${content}"}`;
   response = await create_entity('Document', body);
   //console.log(response);
   return response;
