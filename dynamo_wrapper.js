@@ -12,7 +12,7 @@ var options = {
 };
 
 /*
-  Sends a request based on the options provided.
+  Sends a request based on options
   Do not change.
 */
 async function send_request(){
@@ -23,6 +23,15 @@ async function send_request(){
   });
 };
 
+
+
+/*
+  Creates a connection with the designated Dynamo endpoint. 
+              Parameters: entityType  => The type of data from the Dynamo endpoint you are trying to view or upload
+                                          e.g. 'Document', 'Contacts/total' 
+                          body        => Body of message to be sent to Dynamo Endpoing
+                                          e.g. DOC, pdf, msg
+*/
 async function create_entity(entityType, body) {
   var sql_connection = new Promise(async(resolve, reject)=>{
     options.url =  `https://apiuat.dynamosoftware.com/api/v2.0/entity/${entityType}`
