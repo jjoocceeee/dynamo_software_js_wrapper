@@ -56,6 +56,17 @@ async function create_entity(entityType, body) {
 }
 
 
+/*
+  TODO: Relates two ids together. Useful for relating a document and a fund.
+*/
+async function Document_relate(id_1, id_2) {
+  body = `{"_id1":"${id_1}","_id2":"${id_2}"}`;
+  response = await create_entity('Document_Activity', body);
+  return response;
+}
+
+
+
 
 
 /*
@@ -98,6 +109,24 @@ async function upload_document(title, extension, content){
 
 
 /*
+  Same thing as upload_document just adds a tag field.
+  Sends a document to api Document endpoint through POST request. 
+              Parameters: title       => Name of documents
+                          extension   => document type 
+                                          e.g. DOC, pdf, msg
+                          content     => string base64 encoded senst from document.
+                          tag         => tag id of L_Document_categories.
+                                          e.g. 38b1ef39-b22f-48bb-a44b-339e18f644e6
+*/
+async function upload_document_with_tag(title, extension, content, tag){
+  body = `{"Title":"${title}","Extension":".${extension}","_content":"${content}", "Documentcategories":[{"id":"${tag}", "es":"L_Document_categories"}] }`;
+  response = await create_entity('Document', body);
+  // console.log("Dynamo: ", response);
+  return response;
+}
+
+
+/*
   Gets an array of all funds.
   Internal Helper Function. Do not touch.
 */
@@ -123,14 +152,35 @@ async function get_entity_ids(entity){
 async function get_fund_id(fund_name){
   let fund_info = new Promise(async(resolve, reject)=>{
     funds = await get_entity_ids('Fund');
-    var count = 0;
+    var count = 1;
     for (let i = 0; i<funds.length; i++) {
+      console.log(funds[i].Identifier);
       if(funds[i].Identifier == fund_name){
         resolve(funds[i]._id);
+        break;
       }
+      count ++;
     }
+    if(count > funds.length){
+    reject("Couldn't find fund id for ", fund_name);
+  }
   });
   return fund_info;
+}
+
+
+
+
+/*
+  TODO: Adding a relation between each of the documents.
+            Paramaters: array_of_documents    => Array of document ids that should be related.
+                                                 e.g. ["89880200-670a-47a1-abb3-e31d4de38d6b", "b3ea377e-3bab-4bbb-be81-e7347638146a", "0eee90ba-8932-4d92-8871-87c6ea9ea6a8"]
+
+*/
+async function add_relation(array_of_documents){
+  for (doc in array_of_documents){
+
+  }
 }
 
 /*
@@ -189,6 +239,7 @@ module.exports.create_entity = create_entity;
 module.exports.add_manager = add_manager;
 module.exports.get_fund_id = get_fund_id;
 module.exports.get_relation = get_relation;
+module.exports.upload_document_with_tag = upload_document_with_tag;
 
 
 
