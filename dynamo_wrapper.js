@@ -39,7 +39,7 @@ var options = {
 */
 async function create_entity(entityType, body) {
   var sql_connection = new Promise(async(resolve, reject)=>{
-    options.url =  `https://apiuat.dynamosoftware.com/api/v2.0/entity/${entityType}`
+    options.url =  `https://api.dynamosoftware.com/api/v2.0/entity/${entityType}`
     options.body = body;  
       await request.post(options, (error, response, body)=>{
         if(error) {
@@ -47,8 +47,13 @@ async function create_entity(entityType, body) {
           reject(error);
         }
         else {
-          resolve({response, body});
-          console.log('statusCode:', response && response.statusCode); // Print the response status code if a response was received
+          console.log('statusCode:', response.statusCode);
+          if(response.statusCode != 200){
+            reject(`\n\nError creating ${options.url} Status code ${response.statusCode}\n ${response}`)
+          }
+          else{
+            resolve({response, body});
+          }
         }
       });
   });
@@ -57,12 +62,48 @@ async function create_entity(entityType, body) {
 
 
 /*
-  TODO: Relates two ids together. Useful for relating a document and a fund.
+  TODO: wrap this in a promise. 
+  Relates two ids together. Useful for relating a document and a fund.
 */
-async function Document_relate(id_1, id_2) {
-  body = `{"_id1":"${id_1}","_id2":"${id_2}"}`;
-  response = await create_entity('Document_Activity', body);
+async function Document_relate(relation_type, id_1, id_2) {
+  var Doc_rel = new Promise(async(resolve, reject)=>{
+    body = `{"_id1":"${id_2}","_id2":"${id_1}"}`;
+    try{
+     response = await create_entity(relation_type, body);
+     resolve(response);
+     console.log(`Successfully related ${id_1} to ${id_2}`);
+    } catch{
+      console.log(`ERROR Wasn't able to realate Fund: ${id_1} to Document: ${id_2}`);
+      reject(`ERROR Wasn't able to realate Find: ${id_1} to Document: ${id_2}`);
+    }
+    // console.log("Fund relation response: ", response);
+  });
   return response;
+}
+
+
+
+async function array_of_relations(relations_array){
+  var relations = new Promise(async(resolve, reject)=>{
+    var total = relations_array.length;
+    var errors = 0;
+    for(var j = 0; j< total - 1; j++){
+      for(var k = j+1; k< total; k++){
+        try{
+          await Document_relate("Document_Document", relations_array[j], relations_array[k]);
+        }
+        catch{
+          errors ++;
+          reject(`Unable to relate ${relations_array[j]} to ${relations_array[k]}`);
+        }
+      }
+    }
+    if(errors <= 0)
+    {
+      resolve(`Related all the documents.`);
+    }
+  });
+  return relations;
 }
 
 
@@ -78,7 +119,7 @@ async function Document_relate(id_1, id_2) {
 */
 async function get_create_entity(entityType) {
   var sql_connection = new Promise(async(resolve, reject)=>{
-    options.url =  `https://apiuat.dynamosoftware.com/api/v2.0/entity/${entityType}`
+    options.url =  `https://api.dynamosoftware.com/api/v2.0/entity/${entityType}`
       await request.get(options, (error, response, body)=>{
         if(error) {
           console.log('error:', error); // Print the error if one occurred
@@ -119,11 +160,44 @@ async function upload_document(title, extension, content){
                                           e.g. 38b1ef39-b22f-48bb-a44b-339e18f644e6
 */
 async function upload_document_with_tag(title, extension, content, tag){
-  body = `{"Title":"${title}","Extension":".${extension}","_content":"${content}", "Documentcategories":[{"id":"${tag}", "es":"L_Document_categories"}] }`;
-  response = await create_entity('Document', body);
-  // console.log("Dynamo: ", response);
-  return response;
+  var doc_response = new Promise(async(resolve, reject)=>{
+    body = `{"Title":"JOCEE_TESTING_${title}","Extension":".${extension}","_content":"${content}", "Documentcategories":[{"id":"${tag}", "es":"L_Document_categories"}] }`;
+    response = await create_entity('Document', body);
+    if(response == null){
+        reject(`ERROR: The document wasn't uploaded correctly.\n response: ${response}  \n URI: Document `);
+      }
+      else{
+        resolve(response);
+      }
+  });
+  return doc_response;
 }
+
+
+
+/*
+  Gets an array of all funds.
+  Internal Helper Function. Do not touch.
+*/
+async function get_entity_ids_pagination(entity){
+  
+  var entities = new Promise(async(resolve, reject)=>{
+    response = await get_create_entity(entity);
+    let j = JSON.parse(response.body);
+    let data = j.data;
+    let links = j.links;
+    if(data != undefined){  
+    resolve({data, links});
+    }
+    else{
+      reject("Data is undefined");
+    }
+  });
+  return entities;
+}
+
+
+
 
 
 /*
@@ -150,20 +224,35 @@ async function get_entity_ids(entity){
                   Parameter: fund_name      => Name of fund
 */
 async function get_fund_id(fund_name){
+  console.log("Getting fund id.");
   let fund_info = new Promise(async(resolve, reject)=>{
-    funds = await get_entity_ids('Fund');
-    var count = 1;
-    for (let i = 0; i<funds.length; i++) {
-      console.log(funds[i].Identifier);
-      if(funds[i].Identifier == fund_name){
-        resolve(funds[i]._id);
-        break;
+    var cont = 1;
+    var fund_link = 'fund'
+    while(cont){
+      let funds_links = await get_entity_ids_pagination(fund_link);
+      var funds = funds_links.data;
+      var links = funds_links.links;
+      console.log("Links: ", links);
+      for (let i = 0; i<funds.length; i++) {
+        if(funds[i].Identifier == fund_name){
+          console.log("Found the fund id.");
+          resolve(funds[i]._id);
+          cont = 0;
+          break;
+        }
       }
-      count ++;
-    }
-    if(count > funds.length){
-    reject("Couldn't find fund id for ", fund_name);
-  }
+        console.log("Got in here.")
+        if(links.next != null){
+          // var next_link = links.next;
+          var next_link = links.next.split("?");
+          fund_link = `fund/?${next_link[1]}`;
+          console.log("FUND LINK ", fund_link);
+        }
+        else{
+          reject("couldn't find the fund you are looking for.");
+          cont = 0;
+      }
+    } 
   });
   return fund_info;
 }
@@ -240,6 +329,8 @@ module.exports.add_manager = add_manager;
 module.exports.get_fund_id = get_fund_id;
 module.exports.get_relation = get_relation;
 module.exports.upload_document_with_tag = upload_document_with_tag;
+module.exports.Document_relate = Document_relate;
+module.exports.array_of_relations = array_of_relations;
 
 
 

@@ -16,3 +16,7 @@ In the auth.json file, add your api key and proxy address
     "proxy": "YOUR PROXY ADDRESS"
 }
 ```
+
+
+
+Example Usage:
