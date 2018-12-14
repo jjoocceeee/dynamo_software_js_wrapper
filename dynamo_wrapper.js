@@ -1,5 +1,10 @@
 const request = require('request');
 const auth = require('./private/auth.json');
+const fs = require('fs');
+const async = require('async');
+
+const AsyncLock = require('async-lock');
+var lock = new AsyncLock();
 
 
 //TODO: remove before pushing to production
@@ -19,17 +24,6 @@ var options = {
 
 
 
-// /*
-//   Sends a request based on options
-//   Do not change.
-// */
-// async function send_request(){
-//     request(options, (error, response, body)=>{
-//   });
-// };
-
-
-
 /*
   Creates a connection with the designated Dynamo endpoint. POST REQUEST
               Parameters: entityType  => The type of data from the Dynamo endpoint you are trying to view or upload
@@ -41,6 +35,7 @@ async function create_entity(entityType, body) {
   var sql_connection = new Promise(async(resolve, reject)=>{
     options.url =  `https://api.dynamosoftware.com/api/v2.0/entity/${entityType}`
     options.body = body;  
+    try{
       await request.post(options, (error, response, body)=>{
         if(error) {
           console.log('error:', error); // Print the error if one occurred
@@ -56,6 +51,10 @@ async function create_entity(entityType, body) {
           }
         }
       });
+    }
+    catch{
+      reject("Couldn't create entity");
+    }
   });
   return sql_connection;
 }
@@ -65,42 +64,38 @@ async function create_entity(entityType, body) {
   TODO: wrap this in a promise. 
   Relates two ids together. Useful for relating a document and a fund.
 */
-async function Document_relate(relation_type, id_1, id_2) {
+async function Document_relate(relation_type, id_1, id_2, id) {
   var Doc_rel = new Promise(async(resolve, reject)=>{
-    body = `{"_id1":"${id_2}","_id2":"${id_1}"}`;
+    body = `{"_id1":"${id_1}","_id2":"${id_2}"}`;
     try{
      response = await create_entity(relation_type, body);
      resolve(response);
-     console.log(`Successfully related ${id_1} to ${id_2}`);
-    } catch{
-      console.log(`ERROR Wasn't able to realate Fund: ${id_1} to Document: ${id_2}`);
-      reject(`ERROR Wasn't able to realate Find: ${id_1} to Document: ${id_2}`);
+    //  console.log(`Successfully related ${id_1} to ${id_2}`);
+    } catch {
+      // console.log(`ERROR Wasn't able to realate ${relation_type} ${id_1} to  ${id_2}`);
+      reject(`ERROR Wasn't able to realate ${relation_type} ${id_1} to ${id_2}`);
+      fs.appendFile("log.txt", `Error ${id}== ${relation_type}=${id_1}:${id_2}\n`, (err) => {
+        if (err) throw err;
+      });
     }
-    // console.log("Fund relation response: ", response);
   });
   return response;
 }
 
-
-
-async function array_of_relations(relations_array){
+async function array_of_relations_helper(relations_array, id){
   var relations = new Promise(async(resolve, reject)=>{
-    var total = relations_array.length;
-    var errors = 0;
-    for(var j = 0; j< total - 1; j++){
-      for(var k = j+1; k< total; k++){
-        try{
-          await Document_relate("Document_Document", relations_array[j], relations_array[k]);
-        }
-        catch{
-          errors ++;
-          reject(`Unable to relate ${relations_array[j]} to ${relations_array[k]}`);
+  var total = relations_array.length;
+  for(var j = 0; j< total - 1; j++){
+    for(var k = j+1; k< total; k++){
+      try{
+        await Document_relate("Document_Document", relations_array[j], relations_array[k], id);
+        resolve(id);
+      }
+      catch{
+        errors ++;
+        reject(`UNRELATED: relate ${relations_array[j]} to ${relations_array[k]}`);
         }
       }
-    }
-    if(errors <= 0)
-    {
-      resolve(`Related all the documents.`);
     }
   });
   return relations;
@@ -108,7 +103,18 @@ async function array_of_relations(relations_array){
 
 
 
-
+async function array_of_relations(relations_array, id){
+  var relations = new Promise(async(resolve, reject)=>{
+    try{
+    var yay = async.asyncify(array_of_relations_helper(relations_array), id);
+    resolve(yay);
+    return(yay);
+    }
+    catch{
+      reject("Unnsuccessfully added all array relations.");
+    }
+  });
+}
 
 /*
   Creates a connection with the designated Dynamo endpoint. GET REQUEST
@@ -119,7 +125,8 @@ async function array_of_relations(relations_array){
 */
 async function get_create_entity(entityType) {
   var sql_connection = new Promise(async(resolve, reject)=>{
-    options.url =  `https://api.dynamosoftware.com/api/v2.0/entity/${entityType}`
+    options.url =  `https://api.dynamosoftware.com/api/v2.0/entity/${entityType}`;
+    try{
       await request.get(options, (error, response, body)=>{
         if(error) {
           console.log('error:', error); // Print the error if one occurred
@@ -129,7 +136,12 @@ async function get_create_entity(entityType) {
           resolve({response, body});
         }
       });
+    }catch{
+      reject("Couldn't get_create_entity");
+    }
   });
+
+
   return sql_connection;
 }
 
@@ -143,9 +155,17 @@ async function get_create_entity(entityType) {
                           content     => string base64 encoded senst from document.
 */
 async function upload_document(title, extension, content){
-  body = `{"Title":"${title}","Extension":".${extension}","_content":"${content}"}`;
-  response = await create_entity('Document', body);
-  return response;
+  var upload = new Promise(async(resolve, reject)=>{
+    body = `{"Title":"${title}","Extension":".${extension}","_content":"${content}"}`;
+    try{
+      response = await create_entity('Document', body);
+      resolve(response);
+    } catch{
+      console.log("Didn' upload document correctly.");
+      reject("Didn't upload document", title);
+    }
+});
+    return upload;
 }
 
 
@@ -159,16 +179,18 @@ async function upload_document(title, extension, content){
                           tag         => tag id of L_Document_categories.
                                           e.g. 38b1ef39-b22f-48bb-a44b-339e18f644e6
 */
-async function upload_document_with_tag(title, extension, content, tag){
+async function upload_document_with_tag(title, extension, content, tag, Document_Date){
   var doc_response = new Promise(async(resolve, reject)=>{
-    body = `{"Title":"JOCEE_TESTING_${title}","Extension":".${extension}","_content":"${content}", "Documentcategories":[{"id":"${tag}", "es":"L_Document_categories"}] }`;
-    response = await create_entity('Document', body);
-    if(response == null){
-        reject(`ERROR: The document wasn't uploaded correctly.\n response: ${response}  \n URI: Document `);
-      }
-      else{
-        resolve(response);
-      }
+    body = `{"Title":"${title}","Extension":".${extension}","_content":"${content}", "Documentcategories":[{"id":"${tag}", "es":"L_Document_categories"}], "Documentdate":"${Document_Date}" }`;
+    try{
+      response = await create_entity('Document', body);
+      resolve(response);
+    } catch{
+      reject(`ERROR: The document ${title} wasn't uploaded correctly.\n response: ${response}  \n URI: Document `);
+      fs.appendFile("error.txt", `ERROR: The document ${title} wasn't uploaded correctly.\n response: ${response}  \n URI: Document`, (err) => {
+        if (err) throw err;
+      });
+    }
   });
   return doc_response;
 }
@@ -223,33 +245,37 @@ async function get_entity_ids(entity){
   Gets the fund ID that is associated with the fund name.
                   Parameter: fund_name      => Name of fund
 */
-async function get_fund_id(fund_name){
-  console.log("Getting fund id.");
+async function get_id(entity_id, fund_name){
+  // console.log("Getting fund id.");
+  console.log(`----Fund Id: ${fund_name}`);
   let fund_info = new Promise(async(resolve, reject)=>{
     var cont = 1;
-    var fund_link = 'fund'
+    var fund_link = entity_id;
     while(cont){
       let funds_links = await get_entity_ids_pagination(fund_link);
       var funds = funds_links.data;
       var links = funds_links.links;
-      console.log("Links: ", links);
+      // console.log("Links: ", links);
       for (let i = 0; i<funds.length; i++) {
+        // console.log(funds[i].Name);
         if(funds[i].Identifier == fund_name){
-          console.log("Found the fund id.");
+          console.log(`Found the ${entity_id} id for ${fund_name}: ${funds[i]._id}`);
           resolve(funds[i]._id);
+          return(funds[i]._id);
           cont = 0;
           break;
         }
       }
-        console.log("Got in here.")
+        // console.log("Got in here.")
         if(links.next != null){
           // var next_link = links.next;
           var next_link = links.next.split("?");
-          fund_link = `fund/?${next_link[1]}`;
+          fund_link = `${entity_id}/?${next_link[1]}`;
           console.log("FUND LINK ", fund_link);
         }
         else{
-          reject("couldn't find the fund you are looking for.");
+          console.log(`couldn't find ${fund_name} you are looking for.`);
+          reject(`couldn't find ${fund_name} you are looking for.`);
           cont = 0;
       }
     } 
@@ -258,19 +284,6 @@ async function get_fund_id(fund_name){
 }
 
 
-
-
-/*
-  TODO: Adding a relation between each of the documents.
-            Paramaters: array_of_documents    => Array of document ids that should be related.
-                                                 e.g. ["89880200-670a-47a1-abb3-e31d4de38d6b", "b3ea377e-3bab-4bbb-be81-e7347638146a", "0eee90ba-8932-4d92-8871-87c6ea9ea6a8"]
-
-*/
-async function add_relation(array_of_documents){
-  for (doc in array_of_documents){
-
-  }
-}
 
 /*
   Gets all the available document tags.
@@ -326,7 +339,7 @@ module.exports.upload_document = upload_document;
 module.exports.create_entity = create_entity;
 // module.exports.send_request = send_request;
 module.exports.add_manager = add_manager;
-module.exports.get_fund_id = get_fund_id;
+module.exports.get_id = get_id;
 module.exports.get_relation = get_relation;
 module.exports.upload_document_with_tag = upload_document_with_tag;
 module.exports.Document_relate = Document_relate;
