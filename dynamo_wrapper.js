@@ -74,9 +74,12 @@ async function Document_relate(relation_type, id_1, id_2, id) {
     } catch {
       // console.log(`ERROR Wasn't able to realate ${relation_type} ${id_1} to  ${id_2}`);
       reject(`ERROR Wasn't able to realate ${relation_type} ${id_1} to ${id_2}`);
-      fs.appendFile("log.txt", `Error ${id}== ${relation_type}=${id_1}:${id_2}\n`, (err) => {
-        if (err) throw err;
-      });
+      lock.acquire('log', (done)=>{
+        fs.appendFile("log.txt", `Error ${id}== ${relation_type}=${id_1}:${id_2}\n`, (err) => {
+          if (err) throw err;
+        });
+        done(err, ret);
+    });
     }
   });
   return response;
