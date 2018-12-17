@@ -4,7 +4,7 @@ const fs = require('fs');
 const async = require('async');
 
 const AsyncLock = require('async-lock');
-var lock = new AsyncLock();
+var lock = new AsyncLock({maxPending: 10000});
 
 
 //TODO: remove before pushing to production
@@ -66,6 +66,7 @@ async function create_entity(entityType, body) {
 */
 async function Document_relate(relation_type, id_1, id_2, id) {
   var Doc_rel = new Promise(async(resolve, reject)=>{
+    // lock.acquire('log', async ()=>{
     body = `{"_id1":"${id_1}","_id2":"${id_2}"}`;
     try{
      response = await create_entity(relation_type, body);
@@ -74,14 +75,19 @@ async function Document_relate(relation_type, id_1, id_2, id) {
     } catch {
       // console.log(`ERROR Wasn't able to realate ${relation_type} ${id_1} to  ${id_2}`);
       reject(`ERROR Wasn't able to realate ${relation_type} ${id_1} to ${id_2}`);
-      lock.acquire('log', (done)=>{
+      
         fs.appendFile("log.txt", `Error ${id}== ${relation_type}=${id_1}:${id_2}\n`, (err) => {
           if (err) throw err;
         });
-        done(err, ret);
+
+      }
+      // done(err, ret);
+    }, (err, ret)=>{
+      if(err)
+        console.log("Too many threads!!!! ", err);
+
     });
-    }
-  });
+  // });
   return response;
 }
 
@@ -207,16 +213,24 @@ async function upload_document_with_tag(title, extension, content, tag, Document
 async function get_entity_ids_pagination(entity){
   
   var entities = new Promise(async(resolve, reject)=>{
-    response = await get_create_entity(entity);
-    let j = JSON.parse(response.body);
-    let data = j.data;
-    let links = j.links;
-    if(data != undefined){  
-    resolve({data, links});
+    try{
+      response = await get_create_entity(entity);
+      let j = JSON.parse(response.body);
+      let data = j.data;
+      let links = j.links;
+      if(data != undefined){  
+        resolve({data, links});
+        }
+        else{
+          reject("Data is undefined");
+        }
     }
-    else{
-      reject("Data is undefined");
+    catch{
+      //Catches if the data isn't a JSON object.
+      //UnhandledPromiseRejectionWarning: SyntaxError: Unexpected token < in JSON at position 0
+      reject("Data is undefined! ");
     }
+
   });
   return entities;
 }
@@ -232,15 +246,20 @@ async function get_entity_ids_pagination(entity){
 async function get_entity_ids(entity){
   var entities = new Promise(async(resolve, reject)=>{
     response = await get_create_entity(entity);
-    let j = JSON.parse(response.body);
-    let data = j.data;
-    if(data != undefined){  
-    resolve(data);
+    try{
+      let j = JSON.parse(response.body);
+      let data = j.data;
+      if(data != undefined){  
+      resolve(data);
+      }
+      else{
+        reject("Data is undefined");
+      }
     }
-    else{
-      reject("Data is undefined");
+    catch{
+      reject("Data-JSON is undefined");
     }
-  });
+});
   return entities;
 }
 
