@@ -274,31 +274,37 @@ async function get_id(entity_id, fund_name){
     var cont = 1;
     var fund_link = entity_id;
     while(cont){
-      let funds_links = await get_entity_ids_pagination(fund_link);
-      var funds = funds_links.data;
-      var links = funds_links.links;
-      // console.log("Links: ", links);
-      for (let i = 0; i<funds.length; i++) {
-        // console.log(funds[i].Name);
-        if(funds[i].Identifier == fund_name){
-          console.log(`Found the ${entity_id} id for ${fund_name}: ${funds[i]._id}`);
-          resolve(funds[i]._id);
-          return(funds[i]._id);
-          cont = 0;
-          break;
+      try{
+        let funds_links = await get_entity_ids_pagination(fund_link);
+
+        var funds = funds_links.data;
+        var links = funds_links.links;
+        // console.log("Links: ", links);
+        for (let i = 0; i<funds.length; i++) {
+          // console.log(funds[i].Name);
+          if(funds[i].Identifier == fund_name){
+            console.log(`Found the ${entity_id} id for ${fund_name}: ${funds[i]._id}`);
+            resolve(funds[i]._id);
+            return(funds[i]._id);
+            cont = 0;
+            break;
+          }
+        }
+          // console.log("Got in here.")
+          if(links.next != null){
+            // var next_link = links.next;
+            var next_link = links.next.split("?");
+            fund_link = `${entity_id}/?${next_link[1]}`;
+            console.log("FUND LINK ", fund_link);
+          }
+          else{
+            console.log(`couldn't find ${fund_name} you are looking for.`);
+            reject(`couldn't find ${fund_name} you are looking for.`);
+            cont = 0;
         }
       }
-        // console.log("Got in here.")
-        if(links.next != null){
-          // var next_link = links.next;
-          var next_link = links.next.split("?");
-          fund_link = `${entity_id}/?${next_link[1]}`;
-          console.log("FUND LINK ", fund_link);
-        }
-        else{
-          console.log(`couldn't find ${fund_name} you are looking for.`);
-          reject(`couldn't find ${fund_name} you are looking for.`);
-          cont = 0;
+      catch{
+        //nothing
       }
     } 
   });
