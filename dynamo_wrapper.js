@@ -2,25 +2,14 @@ const request = require('request');
 const auth = require('./private/auth.json');
 const fs = require('fs');
 const async = require('async');
-
-const AsyncLock = require('async-lock');
-var lock = new AsyncLock({maxPending: 10000});
+ 
 
 
 //TODO: remove before pushing to production
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+// process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 
-var options = {
-  url: 'https://api.dynamosoftware.com/api/v2.0/entity',
-  proxy: auth.proxy,
-  headers: {
-    'Content-Type' : 'application/json',
-    'Authorization' : auth.api,
-    'Accept': 'application/json',
-    'User-Agent': 'request'
-  },
-};
+
 
 
 
@@ -32,9 +21,20 @@ var options = {
                                           e.g. DOC, pdf, msg
 */
 async function create_entity(entityType, body) {
-  var sql_connection = new Promise(async(resolve, reject)=>{
+  var connection = new Promise(async(resolve, reject)=>{
+    var options = {
+      url: 'https://api.dynamosoftware.com/api/v2.0/entity',
+      proxy: auth.proxy,
+      headers: {
+        'Content-Type' : 'application/json',
+        'Authorization' : auth.api,
+        'Accept': 'application/json',
+        'User-Agent': 'request'
+      },
+    };
     options.url =  `https://api.dynamosoftware.com/api/v2.0/entity/${entityType}`
     options.body = body;  
+    // console.log(options);
     try{
       await request.post(options, (error, response, body)=>{
         if(error) {
@@ -44,19 +44,20 @@ async function create_entity(entityType, body) {
         else {
           console.log('statusCode:', response.statusCode);
           if(response.statusCode != 200){
-            reject(`\n\nError creating ${options.url} Status code ${response.statusCode}\n ${response}`)
+            console.log(`\n\nError creating ${options.url} for ${entityType} \nStatus code ${response.statusCode}\n ${response.headers}`);
+            reject(`\n\nError creating ${options.url} Status code ${response.statusCode}\n ${response.headers}`)
           }
           else{
             resolve({response, body});
           }
         }
-      });
+      }); 
     }
     catch{
       reject("Couldn't create entity");
     }
   });
-  return sql_connection;
+  return connection;
 }
 
 
@@ -64,22 +65,22 @@ async function create_entity(entityType, body) {
   TODO: wrap this in a promise. 
   Relates two ids together. Useful for relating a document and a fund.
 */
-async function Document_relate(relation_type, id_1, id_2, id) {
+async function Document_relate(relation_type, id_1, id_2) {
   var Doc_rel = new Promise(async(resolve, reject)=>{
     // lock.acquire('log', async ()=>{
     body = `{"_id1":"${id_1}","_id2":"${id_2}"}`;
     try{
      response = await create_entity(relation_type, body);
+     console.log("SUCCCCCCCCCCCCCCCCCCCCCCEEEEEESSSSSS: ", id_2, ":", id_1);
      resolve(response);
     //  console.log(`Successfully related ${id_1} to ${id_2}`);
     } catch {
       // console.log(`ERROR Wasn't able to realate ${relation_type} ${id_1} to  ${id_2}`);
+      fs.appendFile("Fix.txt", `Error== ${relation_type}=${id_1}:${id_2}\n`, (err) => {
+        if (err) throw err;
+      });
       reject(`ERROR Wasn't able to realate ${relation_type} ${id_1} to ${id_2}`);
       
-        fs.appendFile("log.txt", `Error ${id}== ${relation_type}=${id_1}:${id_2}\n`, (err) => {
-          if (err) throw err;
-        });
-
       }
       // done(err, ret);
     }, (err, ret)=>{
@@ -88,7 +89,7 @@ async function Document_relate(relation_type, id_1, id_2, id) {
 
     });
   // });
-  return response;
+  return Doc_rel;
 }
 
 async function array_of_relations_helper(relations_array, id){
@@ -134,6 +135,16 @@ async function array_of_relations(relations_array, id){
 */
 async function get_create_entity(entityType) {
   var sql_connection = new Promise(async(resolve, reject)=>{
+    var options = {
+      url: 'https://api.dynamosoftware.com/api/v2.0/entity',
+      proxy: auth.proxy,
+      headers: {
+        'Content-Type' : 'application/json',
+        'Authorization' : auth.api,
+        'Accept': 'application/json',
+        'User-Agent': 'request'
+      },
+    };
     options.url =  `https://api.dynamosoftware.com/api/v2.0/entity/${entityType}`;
     try{
       await request.get(options, (error, response, body)=>{
@@ -264,42 +275,37 @@ async function get_entity_ids(entity){
 }
 
 /*
-  Gets the fund ID that is associated with the fund name.
-                  Parameter: fund_name      => Name of fund
+  Gets the entity ID that is associated with the entity name.
+                  Parameter: entity_name      => Name of Entity
 */
-async function get_id(entity_id, fund_name){
-  // console.log("Getting fund id.");
-  console.log(`----Fund Id: ${fund_name}`);
-  let fund_info = new Promise(async(resolve, reject)=>{
+async function get_id(entity_id, entity_name){
+  // console.log("Getting entity id.");
+  let entity_info = new Promise(async(resolve, reject)=>{
     var cont = 1;
-    var fund_link = entity_id;
+    var entity_link = entity_id;
     while(cont){
       try{
-        let funds_links = await get_entity_ids_pagination(fund_link);
+        let entitys_links = await get_entity_ids_pagination(entity_link);
 
-        var funds = funds_links.data;
-        var links = funds_links.links;
-        // console.log("Links: ", links);
-        for (let i = 0; i<funds.length; i++) {
-          // console.log(funds[i].Name);
-          if(funds[i].Identifier == fund_name){
-            console.log(`Found the ${entity_id} id for ${fund_name}: ${funds[i]._id}`);
-            resolve(funds[i]._id);
-            return(funds[i]._id);
-            cont = 0;
-            break;
+        var entitys = entitys_links.data;
+        var links = entitys_links.links;
+        for (let i = 0; i<entitys.length; i++) {
+            console.log(entitys[i].Identifier)
+          if(entitys[i].Identifier == entity_name){
+            // console.log(`Found the ${entity_id} id for ${entity_name}: ${entitys[i]._id}`);
+            resolve(entitys[i]._id);
+            return(entitys[i]._id);
           }
         }
-          // console.log("Got in here.")
           if(links.next != null){
-            // var next_link = links.next;
             var next_link = links.next.split("?");
-            fund_link = `${entity_id}/?${next_link[1]}`;
-            console.log("FUND LINK ", fund_link);
+            entity_link = `${entity_id}/?${next_link[1]}`;
+            // console.log("entity LINK ", entity_link);
           }
           else{
-            console.log(`couldn't find ${fund_name} you are looking for.`);
-            reject(`couldn't find ${fund_name} you are looking for.`);
+        // console.log("KEY: ", key);
+        // console.log(`couldn't find ${entity_name} you are looking for.`);
+            reject(`couldn't find ${entity_name} you are looking for.`);
             cont = 0;
         }
       }
@@ -308,7 +314,7 @@ async function get_id(entity_id, fund_name){
       }
     } 
   });
-  return fund_info;
+  return entity_info;
 }
 
 
