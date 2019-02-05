@@ -5,7 +5,7 @@ const async = require('async');
  
 
 
-//TODO: remove before pushing to production
+//Remove this line if you want to disable https certificate checking.
 // process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 
@@ -34,7 +34,6 @@ async function create_entity(entityType, body) {
     };
     options.url =  `https://api.dynamosoftware.com/api/v2.0/entity/${entityType}`
     options.body = body;  
-    // console.log(options);
     try{
       await request.post(options, (error, response, body)=>{
         if(error) {
@@ -62,54 +61,28 @@ async function create_entity(entityType, body) {
 
 
 /*
-  TODO: wrap this in a promise. 
   Relates two ids together. Useful for relating a document and a fund.
 */
 async function Document_relate(relation_type, id_1, id_2) {
   var Doc_rel = new Promise(async(resolve, reject)=>{
-    // lock.acquire('log', async ()=>{
     body = `{"_id1":"${id_1}","_id2":"${id_2}"}`;
     try{
      response = await create_entity(relation_type, body);
      console.log("SUCCCCCCCCCCCCCCCCCCCCCCEEEEEESSSSSS: ", id_2, ":", id_1);
      resolve(response);
-    //  console.log(`Successfully related ${id_1} to ${id_2}`);
     } catch {
-      // console.log(`ERROR Wasn't able to realate ${relation_type} ${id_1} to  ${id_2}`);
-      fs.appendFile("Fix.txt", `Error== ${relation_type}=${id_1}:${id_2}\n`, (err) => {
-        if (err) throw err;
-      });
+      console.log(`ERROR Wasn't able to realate ${relation_type} ${id_1} to  ${id_2}`);
       reject(`ERROR Wasn't able to realate ${relation_type} ${id_1} to ${id_2}`);
       
       }
-      // done(err, ret);
     }, (err, ret)=>{
       if(err)
         console.log("Too many threads!!!! ", err);
 
     });
-  // });
   return Doc_rel;
 }
 
-async function array_of_relations_helper(relations_array, id){
-  var relations = new Promise(async(resolve, reject)=>{
-  var total = relations_array.length;
-  for(var j = 0; j< total - 1; j++){
-    for(var k = j+1; k< total; k++){
-      try{
-        await Document_relate("Document_Document", relations_array[j], relations_array[k], id);
-        resolve(id);
-      }
-      catch{
-        errors ++;
-        reject(`UNRELATED: relate ${relations_array[j]} to ${relations_array[k]}`);
-        }
-      }
-    }
-  });
-  return relations;
-}
 
 
 
@@ -207,9 +180,6 @@ async function upload_document_with_tag(title, extension, content, tag, Document
       resolve(response);
     } catch{
       reject(`ERROR: The document ${title} wasn't uploaded correctly.\n response: ${response}  \n URI: Document `);
-      fs.appendFile("error.txt", `ERROR: The document ${title} wasn't uploaded correctly.\n response: ${response}  \n URI: Document`, (err) => {
-        if (err) throw err;
-      });
     }
   });
   return doc_response;
@@ -238,7 +208,6 @@ async function get_entity_ids_pagination(entity){
     }
     catch{
       //Catches if the data isn't a JSON object.
-      //UnhandledPromiseRejectionWarning: SyntaxError: Unexpected token < in JSON at position 0
       reject("Data is undefined! ");
     }
 
@@ -279,7 +248,6 @@ async function get_entity_ids(entity){
                   Parameter: entity_name      => Name of Entity
 */
 async function get_id(entity_id, entity_name){
-  // console.log("Getting entity id.");
   let entity_info = new Promise(async(resolve, reject)=>{
     var cont = 1;
     var entity_link = entity_id;
@@ -292,7 +260,6 @@ async function get_id(entity_id, entity_name){
         for (let i = 0; i<entitys.length; i++) {
             console.log(entitys[i].Identifier)
           if(entitys[i].Identifier == entity_name){
-            // console.log(`Found the ${entity_id} id for ${entity_name}: ${entitys[i]._id}`);
             resolve(entitys[i]._id);
             return(entitys[i]._id);
           }
@@ -300,11 +267,8 @@ async function get_id(entity_id, entity_name){
           if(links.next != null){
             var next_link = links.next.split("?");
             entity_link = `${entity_id}/?${next_link[1]}`;
-            // console.log("entity LINK ", entity_link);
           }
           else{
-        // console.log("KEY: ", key);
-        // console.log(`couldn't find ${entity_name} you are looking for.`);
             reject(`couldn't find ${entity_name} you are looking for.`);
             cont = 0;
         }
@@ -317,6 +281,28 @@ async function get_id(entity_id, entity_name){
   return entity_info;
 }
 
+
+/*
+ * Internal Helper Method: Relates an array of relations.
+ */
+async function array_of_relations_helper(relations_array, id){
+  var relations = new Promise(async(resolve, reject)=>{
+  var total = relations_array.length;
+  for(var j = 0; j< total - 1; j++){
+    for(var k = j+1; k< total; k++){
+      try{
+        await Document_relate("Document_Document", relations_array[j], relations_array[k], id);
+        resolve(id);
+      }
+      catch{
+        errors ++;
+        reject(`UNRELATED: relate ${relations_array[j]} to ${relations_array[k]}`);
+        }
+      }
+    }
+  });
+  return relations;
+}
 
 
 /*
@@ -367,11 +353,10 @@ async function add_manager({last_name = "", first_name = "", title = "", company
 
 
 /*
-  Exporting modules... There has got to be a better way to do this.
+  Exporting modules old school I guess... 
 */
 module.exports.upload_document = upload_document;
 module.exports.create_entity = create_entity;
-// module.exports.send_request = send_request;
 module.exports.add_manager = add_manager;
 module.exports.get_id = get_id;
 module.exports.get_relation = get_relation;
